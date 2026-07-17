@@ -39,7 +39,6 @@ function sendLongMessage(chatId, text) {
     return bot.sendMessage(chatId, text);
   }
   
-  // Разбиваем по строкам, чтобы не резать слова посередине
   const parts = [];
   for (let i = 0; i < text.length; i += maxLength) {
     parts.push(text.substring(i, i + maxLength));
@@ -62,6 +61,8 @@ bot.onText(/\/start/, async (msg) => {
 Доступные команды:
 /files - Список файлов и папок
 /cd <путь> - Перейти в папку
+/mkdir <имя> - Создать папку
+/rm <путь> - Удалить файл или папку
 /upload <путь> - Загрузить файлы в папку
 /cmd <команда> - Выполнить shell команду
 /npm <команда> - Выполнить npm команду
@@ -114,6 +115,39 @@ bot.onText(/\/cd (.+)/, async (msg, match) => {
   }
 });
 
+// Команда /mkdir - создать папку
+bot.onText(/\/mkdir (.+)/, async (msg, match) => {
+  if (!isAdmin(msg.from.id)) return;
+  
+  try {
+    const newDirPath = getSafePath(match[1]);
+    await fs.mkdir(newDirPath, { recursive: true });
+    await bot.sendMessage(msg.chat.id, `✅ Папка создана: \`${newDirPath}\``, { parse_mode: 'Markdown' });
+  } catch (err) {
+    await bot.sendMessage(msg.chat.id, `❌ Ошибка создания папки: ${err.message}`);
+  }
+});
+
+// Команда /rm - удалить файл или папку
+bot.onText(/\/rm (.+)/, async (msg, match) => {
+  if (!isAdmin(msg.from.id)) return;
+  
+  try {
+    const targetPath = getSafePath(match[1]);
+    const stat = await fs.stat(targetPath);
+    
+    if (stat.isDirectory()) {
+      await fs.rm(targetPath, { recursive: true, force: true });
+      await bot.sendMessage(msg.chat.id, `✅ Папка удалена: \`${targetPath}\``, { parse_mode: 'Markdown' });
+    } else {
+      await fs.unlink(targetPath);
+      await bot.sendMessage(msg.chat.id, `✅ Файл удален: \`${targetPath}\``, { parse_mode: 'Markdown' });
+    }
+  } catch (err) {
+    await bot.sendMessage(msg.chat.id, `❌ Ошибка удаления: ${err.message}`);
+  }
+});
+
 // Команда /upload
 bot.onText(/\/upload(?: (.+))?/, async (msg, match) => {
   if (!isAdmin(msg.from.id)) return;
@@ -149,7 +183,6 @@ bot.on('document', async (msg) => {
     await fs.rename(downloadedPath, finalPath);
     await bot.sendMessage(msg.chat.id, `✅ Файл сохранен: \`${finalPath}\``, { parse_mode: 'Markdown' });
     
-    // Логируем в БД
     await db.query('INSERT INTO files (path, size) VALUES (?, ?)', [finalPath, msg.document.file_size]).catch(console.error);
   } catch (err) {
     await bot.sendMessage(msg.chat.id, `❌ Ошибка загрузки: ${err.message}`);
@@ -160,7 +193,7 @@ bot.on('document', async (msg) => {
 bot.on('photo', async (msg) => {
   if (!isAdmin(msg.from.id) || !uploadMode.active) return;
   
-  const photo = msg.photo[msg.photo.length - 1]; // Берем фото максимального разрешения
+  const photo = msg.photo[msg.photo.length - 1];
   
   try {
     const downloadedPath = await bot.downloadFile(photo.file_id, uploadMode.targetPath);
@@ -263,12 +296,16 @@ bot.onText(/\/help/, (msg) => {
 
 • /files - Список файлов в текущей папке
 • /cd <путь> - Перейти в папку (пример: \`/cd src\`)
+• /mkdir <имя> - Создать папку (пример: \`/mkdir src/utils\`)
+• /rm <путь> - Удалить файл или папку (пример: \`/rm old.txt\`)
 • /upload [путь] - Включить режим загрузки файлов
 • /cancel - Выключить режим загрузки
 • /cmd <команда> - Выполнить shell команду (пример: \`/cmd ls -la\`)
-• /npm <команда> - Выполнить npm команду (пример: \`/npm install express\`)
+• /npm <аргументы> - Выполнить npm команду (пример: \`/npm install express\`)
 • /db <SQL> - Выполнить SQL запрос (пример: \`/db SELECT * FROM logs\`)
 • /status - Показать статус сервера
+
+⚠️ **Важно:** Удаление файлов через \`/rm\` необратимо!
   `, { parse_mode: 'Markdown' });
 });
 
