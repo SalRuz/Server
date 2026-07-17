@@ -1,21 +1,39 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs'); // Добавлено для проверки и создания папки
 
 class Database {
   constructor() {
-    this.dbPath = path.join(__dirname, 'database.sqlite');
+    // Путь к папке data (как в предоставленном отрывке)
+    const dataDir = '/app/data';
+    
+    // Создаем папку, если её нет (рекурсивно)
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    // Путь к базе данных
+    this.dbPath = path.join(dataDir, 'bot.db');
+
     this.db = new sqlite3.Database(this.dbPath, (err) => {
       if (err) {
-        console.error('❌ Ошибка подключения к БД:', err.message);
+        console.error('❌ Ошибка открытия базы данных:', err.message);
       } else {
-        console.log('✅ База данных подключена');
+        console.log(`✅ База данных подключена: ${this.dbPath}`);
         this.initTables();
       }
     });
   }
 
   initTables() {
+    // Объединяем вашу новую таблицу users с существующими таблицами
     const sql = `
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -40,7 +58,11 @@ class Database {
     `;
     
     this.db.exec(sql, (err) => {
-      if (err) console.error('❌ Ошибка создания таблиц:', err.message);
+      if (err) {
+        console.error('❌ Ошибка создания таблиц:', err.message);
+      } else {
+        console.log('✅ Таблицы созданы или уже существуют');
+      }
     });
   }
 
