@@ -68,6 +68,7 @@ bot.onText(/\/start/, async (msg) => {
 /npm <команда> - Выполнить npm команду
 /db <запрос> - Выполнить SQL запрос
 /status - Статус сервера
+/stop - 🛑 Завершить работу бота (аналог Ctrl+C)
 /cancel - Отменить режим загрузки
 /help - Подробная справка
   `, { parse_mode: 'Markdown' });
@@ -287,6 +288,24 @@ bot.onText(/\/status/, async (msg) => {
   await bot.sendMessage(msg.chat.id, status, { parse_mode: 'Markdown' });
 });
 
+// 🛑 КОМАНДА /stop - Эмуляция Ctrl+C (SIGINT)
+bot.onText(/\/stop/, async (msg) => {
+  if (!isAdmin(msg.from.id)) return;
+  
+  await bot.sendMessage(msg.chat.id, '⚠️ **Получена команда остановки.**\nЗавершение работы бота и сохранение данных...', { parse_mode: 'Markdown' });
+  
+  // 1. Останавливаем polling, чтобы бот перестал принимать новые сообщения
+  bot.stopPolling();
+  
+  // 2. Корректно закрываем соединение с базой данных
+  await db.close();
+  
+  console.log('🛑 Инициировано корректное завершение работы (аналог Ctrl+C / SIGINT)...');
+  
+  // 3. Отправляем процессу сигнал SIGINT (программный аналог нажатия Ctrl+C в терминале)
+  process.kill(process.pid, 'SIGINT');
+});
+
 // Команда /help
 bot.onText(/\/help/, (msg) => {
   if (!isAdmin(msg.from.id)) return;
@@ -301,9 +320,10 @@ bot.onText(/\/help/, (msg) => {
 • /upload [путь] - Включить режим загрузки файлов
 • /cancel - Выключить режим загрузки
 • /cmd <команда> - Выполнить shell команду (пример: \`/cmd ls -la\`)
-• /npm <аргументы> - Выполнить npm команду (пример: \`/npm install express\`)
-• /db <SQL> - Выполнить SQL запрос (пример: \`/db SELECT * FROM logs\`)
+• /npm <аргументы> - Выполнить npm команду (пример: \`/npm install\`)
+• /db <SQL> - Выполнить SQL запрос (пример: \`/db SELECT * FROM users\`)
 • /status - Показать статус сервера
+• /stop - 🛑 Завершить работу бота (аналог Ctrl+C)
 
 ⚠️ **Важно:** Удаление файлов через \`/rm\` необратимо!
   `, { parse_mode: 'Markdown' });
@@ -321,6 +341,12 @@ process.on('uncaughtException', (err) => {
     bot.sendMessage(adminId, `🚨 **Критическая ошибка сервера:**\n\`${err.message}\``, { parse_mode: 'Markdown' }).catch(console.error);
   }
   process.exit(1);
+});
+
+// Перехват сигнала SIGINT (Ctrl+C) для красивого завершения
+process.on('SIGINT', () => {
+  console.log('\n👋 Бот успешно остановлен. До встречи!');
+  process.exit(0);
 });
 
 console.log(`🤖 Бот запущен. Рабочая директория: ${workspace}`);
